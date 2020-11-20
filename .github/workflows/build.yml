@@ -1,0 +1,45 @@
+
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: docker build -f Dockerfile -t tcpdump .
+    - name: Extract artifact
+      run: docker create -ti --name dummy `docker images | grep tcpdump | awk '{print $3}'` bash && docker cp dummy:/app/tcpdump.7z .
+    - name: Get git commit info
+      id: current-commit
+      run: |
+           echo "::set-output name=git_commit_time::`git log -1 --pretty=%ct`"
+           echo "::set-output name=git_commit_date::`git log -1 --pretty=%cd`"
+           echo "::set-output name=git_commit_message::`git log -1 --pretty=%B`"
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.current-commit.outputs.git_commit_time }}
+        release_name: Release ${{ steps.current-commit.outputs.git_commit_time }}
+        body: ${{ steps.current-commit.outputs.git_commit_message }}
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./tcpdump.7z
+        asset_name: tcpdump.7z
+        asset_content_type: application/7z
